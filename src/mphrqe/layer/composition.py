@@ -3,7 +3,7 @@ from abc import abstractmethod
 
 import torch
 from class_resolver import Resolver
-from pykeen.moves import irfft, rfft
+from torch.fft import irfft, rfft
 from torch import nn
 
 __all__ = [
