@@ -10,7 +10,7 @@ import numpy
 import pandas
 import torch
 import torch.utils.data
-from pykeen.evaluation.rank_based_evaluator import RANK_OPTIMISTIC, RANK_PESSIMISTIC, RANK_REALISTIC, RANK_TYPES
+from pykeen.typing import RANK_OPTIMISTIC, RANK_PESSIMISTIC, RANK_REALISTIC, RANK_TYPES
 from tqdm.auto import tqdm
 
 from .data import QueryGraphBatch
