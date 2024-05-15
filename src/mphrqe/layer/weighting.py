@@ -2,7 +2,7 @@
 from typing import Any, Mapping, Optional, Tuple
 
 import torch
-from class_resolver import HintOrType, Resolver
+from class_resolver import ClassResolver, HintOrType, Resolver
 from torch import nn
 
 from .util import activation_resolver, get_parameter, softmax
@@ -112,7 +112,7 @@ class AttentionMessageWeighting(MessageWeighting):
         return message_, alpha
 
 
-message_weighting_resolver = Resolver.from_subclasses(
+message_weighting_resolver: ClassResolver[MessageWeighting] = Resolver.from_subclasses(
     base=MessageWeighting,
     default=SymmetricMessageWeighting,
 )

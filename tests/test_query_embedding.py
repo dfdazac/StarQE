@@ -4,7 +4,7 @@ from typing import Any, MutableMapping
 import torch
 import unittest_templates
 
-from mphrqe.data import QueryGraphBatch
+from gqs.loader import QueryGraphBatch
 from mphrqe.models import QueryEmbeddingModel, StarEQueryEmbeddingModel
 
 
@@ -39,7 +39,8 @@ class QueryEmbeddingModelTests(unittest_templates.GenericTestCase[QueryEmbedding
             qualifier_index=self.qualifier_index,
             graph_ids=self.graph_ids,
             query_diameter=...,
-            targets=...,
+            easy_targets=...,
+            hard_targets=...,
         )
         x_g = self.instance(query_graph_batch)
         assert torch.is_tensor(x_g)

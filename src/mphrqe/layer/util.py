@@ -3,7 +3,7 @@ from typing import Union
 
 import torch
 from class_resolver import Resolver
-from torch import nn
+from torch import Module, nn
 from torch_scatter import scatter_add, scatter_max
 
 __all__ = [
@@ -54,7 +54,7 @@ def get_parameter(
     return param
 
 
-activation_resolver = Resolver(
+activation_resolver: Resolver[Module] = Resolver(
     classes={
         nn.LeakyReLU,
         nn.Identity,

@@ -9,12 +9,12 @@ from typing import Collection, List, Mapping, MutableMapping, Optional, Tuple, U
 import numpy
 import pandas
 import torch
-import torch.utils.data
+from torch.utils.data import DataLoader
 from pykeen.typing import RANK_OPTIMISTIC, RANK_PESSIMISTIC, RANK_REALISTIC, RANK_TYPES
 from tqdm.auto import tqdm
 
-from .data import QueryGraphBatch
-from .data.mapping import get_entity_mapper
+from gqs.loader import QueryGraphBatch
+# from .data.mapping import get_entity_mapper
 from .loss import QueryEmbeddingLoss
 from .models import QueryEmbeddingModel
 from .similarity import Similarity
@@ -306,7 +306,7 @@ class RankingMetricAggregator(ScoreAggregator):
         self._expected_ranks_weights.append(ranks.weight)
 
     def finalize(self) -> Mapping[str, float]:  # noqa: D102
-        result = dict()
+        result: dict[str, float] = dict()
         for rank_type, agg in self._aggregators.items():
             for key, value in agg.finalize().items():
                 result[f"{rank_type}.{key}"] = value
@@ -325,7 +325,7 @@ class RankingMetricAggregator(ScoreAggregator):
 
 @torch.no_grad()
 def evaluate(
-    data_loader: torch.utils.data.DataLoader[QueryGraphBatch],
+    data_loader: DataLoader[QueryGraphBatch],
     model: QueryEmbeddingModel,
     similarity: Similarity,
     loss: QueryEmbeddingLoss,
@@ -363,45 +363,9 @@ def evaluate(
     )
 
 
-def expected_mean_rank_from_csv(
-    csv_path: Union[pathlib.Path, os.PathLike],
-    average: str = MICRO_AVERAGE,
-    num_entities: Optional[int] = None,
-) -> float:
-    """Compute expected mean rank for queries stored as CSV."""
-    # TODO: Fix the number of entities
-    num_entities = num_entities or get_entity_mapper().highest_entity_index + 1
-
-    # normalize path
-    csv_path = pathlib.Path(csv_path).expanduser().resolve()
-    df = pandas.read_csv(csv_path)
-    logger.info(f"Read {df.shape[0]} queries from {csv_path.as_uri()}")
-
-    target_columns = [c for c in df.columns if c.endswith("target")]
-    assert len(target_columns) == 1
-
-    # aggregate
-    nominator = denominator = 0
-    for nt in (df[target_columns[0]].str.count("|") + 1):
-        num_candidates = num_entities - nt + 1
-        exp = 0.5 * (num_candidates + 1)
-        if average == MICRO_AVERAGE:
-            # micro average, each true answer's rank counts
-            nominator += exp * nt
-            denominator += nt
-        elif average == MACRO_AVERAGE:
-            # macro average, all true answer's contribute together as one
-            nominator += exp
-            denominator += 1
-        else:
-            raise ValueError(average)
-
-    return nominator / denominator
-
-
 @torch.no_grad()
 def evaluate_qualifier_impact(
-    data_loader: torch.utils.data.DataLoader[QueryGraphBatch],
+    data_loader: DataLoader[QueryGraphBatch],
     model: QueryEmbeddingModel,
     similarity: Similarity,
     ks: Collection[int] = (1, 3, 5, 10),

@@ -4,7 +4,7 @@ import pathlib
 import pickle
 import pprint
 import secrets
-from typing import List, Optional
+from typing import List, Mapping, Optional
 
 import click
 import torch
@@ -13,12 +13,16 @@ from pykeen.utils import resolve_device
 from .evaluation import RANK_REALISTIC
 from torch import nn
 
-from .data.config import binary_query_root
-from .data.loader import get_query_data_loaders, resolve_sample
-from .data.mapping import (
-    get_entity_mapper,
-    get_relation_mapper,
-)
+from gqs.dataset import Dataset
+from gqs.sample import resolve_sample
+from gqs.loader import get_query_data_loaders
+
+# from .data.config import binary_query_root
+# from .data.loader import get_query_data_loaders, resolve_sample
+# from .data.mapping import (
+#     get_entity_mapper,
+#     get_relation_mapper,
+# )
 from .evaluation import evaluate
 from .hpo import optimize
 from .layer.aggregation import (
@@ -42,18 +46,20 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 # Data options
-option_data_root = click.option(
-    "-i",
-    "--data-root",
-    type=pathlib.Path,
-    default=binary_query_root,
+option_dataset = click.option(
+    "--dataset",
+    type=Dataset,
+    help="The name of the dataset. Must match [_a-z]+",
+    required=True,
+    #    callback=validate_dataset_name,
 )
 option_train_data = click.option(
     "-tr",
     "--train-data",
     type=str,
     multiple=True,
-    default=["/2hop/1qual:1000"],
+    help="The selector for the training data, e.g., /2hop/1qual:1000",
+    default=[],
 )
 option_validation_data = click.option(
     "-va",
@@ -257,7 +263,7 @@ def main():
 
 @main.command(name="train")
 # data options
-@option_data_root
+@option_dataset
 @option_train_data
 @option_validation_data
 @option_test_data
@@ -294,7 +300,7 @@ def main():
 @option_model_path
 def train_cli(
     # data
-    data_root: pathlib.Path,
+    dataset: Dataset,
     train_data: List[str],
     validation_data: List[str],
     test_data: List[str],
@@ -336,7 +342,7 @@ def train_cli(
 
     logger.info("Start loading data.")
     data_loaders, information = get_query_data_loaders(
-        data_root=data_root,
+        dataset=dataset,
         train=map(resolve_sample, train_data),
         validation=map(resolve_sample, validation_data),
         test=map(resolve_sample, test_data),
@@ -350,14 +356,14 @@ def train_cli(
         config=config,
         use_wandb=use_wandb,
         wandb_name=wandb_name,
-        information=information,
+        information=information.info,
         wandb_group=wandb_group,
         is_hpo=False,
     )
 
     model = StarEQueryEmbeddingModel(
-        num_entities=get_entity_mapper().get_largest_embedding_id() + 1,
-        num_relations=get_relation_mapper().get_largest_forward_relation_id() + 1,
+        num_entities=dataset.entity_mapper.number_of_real_entities() + 3,  # we add a target, a variable and a blank node embedding
+        num_relations=dataset.relation_mapper.get_largest_forward_relation_id() + 1,
         embedding_dim=embedding_dim,
         num_layers=num_layers,
         dropout=dropout,
@@ -411,7 +417,7 @@ def train_cli(
 
 @main.command(name="evaluate")
 # data options
-@option_data_root
+@option_dataset
 @option_train_data
 @option_validation_data
 @option_test_data
@@ -434,7 +440,7 @@ def train_cli(
 @click.option("--evaluate-faithfulness", default=False, is_flag=True)
 def evaluate_cli(
     # data options
-    data_root: pathlib.Path,
+    dataset: Dataset,
     train_data: List[str],
     validation_data: List[str],
     test_data: List[str],
@@ -472,7 +478,7 @@ def evaluate_cli(
         f"Loaded model, trained on \n{pprint.pformat(dict(train_information))}\n"
         f"using configuration \n{pprint.pformat(config)}\n.",
     )
-    train_batch_size = config["batch_size"]
+    train_batch_size = int(config["batch_size"])
     if batch_size is None:
         logger.info(f"No batch size provided. Using the training batch size: {train_batch_size}")
         batch_size = train_batch_size
@@ -482,14 +488,14 @@ def evaluate_cli(
     # Load data
     logger.info("Loading evaluation data.")
     data_loaders, information = get_query_data_loaders(
-        data_root=data_root,
+        dataset=dataset,
         train=map(resolve_sample, train_data) if evaluate_faithfulness else [],
         validation=map(resolve_sample, validation_data),
         test=map(resolve_sample, test_data),
         batch_size=batch_size,
         num_workers=num_workers,
     )
-    logger.info(f"Evaluating on: \n{pprint.pformat(dict(information))}\n")
+    logger.info(f"Evaluating on: \n{pprint.pformat(dict(information.info))}\n")
 
     # instantiate decoder
     similarity = similarity_resolver.make(query=data["similarity"])
@@ -505,11 +511,11 @@ def evaluate_cli(
         use_wandb=use_wandb,
         wandb_name=wandb_name,
         wandb_group=wandb_group,
-        information=information,
+        information=information.info,
         is_hpo=False,
     )
 
-    result = dict()
+    result: dict[str, Mapping[str, float]] = dict()
     for key, data_loader in data_loaders.items():
         if key == "train" and not evaluate_faithfulness:
             continue
@@ -533,7 +539,7 @@ METRICS = {
 
 
 @main.command(name="optimize")
-@option_data_root
+@option_dataset
 @option_train_data
 @option_validation_data
 @option_test_data
@@ -546,7 +552,7 @@ METRICS = {
 @option_num_layers_optional
 def optimize_cli(
     # data options
-    data_root: pathlib.Path,
+    dataset: Dataset,
     train_data: List[str],
     validation_data: List[str],
     test_data: List[str],
@@ -563,7 +569,7 @@ def optimize_cli(
 ):
     """Optimize hyperparameters using optuna."""
     result = optimize(
-        data_root=data_root,
+        dataset=dataset,
         train_data=train_data,
         validation_data=validation_data,
         test_data=test_data,
@@ -576,4 +582,3 @@ def optimize_cli(
         num_layers=num_layers,
     )
     print(f"Best model parameters = {result}")
-

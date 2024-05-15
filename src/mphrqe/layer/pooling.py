@@ -57,6 +57,13 @@ class SumGraphPooling(GraphPooling):
 class TargetPooling(GraphPooling):
     """Aggregation by sum."""
 
+    def __init__(self, target_index: int) -> None:
+        """
+        Do the target pooling with respect to the given query target index.
+        In StarQE, this was set to `get_entity_mapper().highest_entity_index + 1`
+        """
+        self._target_index = target_index
+
     def forward(
         self,
         x_e: torch.FloatTensor,
@@ -67,7 +74,7 @@ class TargetPooling(GraphPooling):
         graph_ids: binary mask
         """
         assert entity_ids is not None
-        mask = entity_ids == get_entity_mapper().highest_entity_index + 1
+        mask = entity_ids == self._target_index
         assert mask.sum() == graph_ids.unique().shape[0], "There should be exactly one target node per graph."
         return x_e[mask]
 

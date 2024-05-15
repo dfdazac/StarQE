@@ -6,7 +6,10 @@
 conda create -n hqeqs python=3.11
 conda activate hqeqs
 pip install -e .
+# For GPU, cude 11.8
 pip install pyg_lib torch_scatter torch_sparse -f https://data.pyg.org/whl/torch-2.3.0+cu118.html
+# or for CPU:
+pip install pyg_lib torch_scatter torch_sparse -f https://data.pyg.org/whl/torch-2.3.0+cpu.html
 ```
 
 <p align="center">

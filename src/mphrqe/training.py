@@ -8,7 +8,7 @@ from class_resolver import HintOrType, OptionalKwargs
 from pykeen.utils import resolve_device
 from pykeen.optimizers import optimizer_resolver
 
-from .data import QueryGraphBatch
+from gqs.loader import QueryGraphBatch
 from .early_stopping import EarlyStopper
 from .evaluation import RankingMetricAggregator, evaluate
 from .loss import QueryEmbeddingLoss, query_embedding_loss_resolver

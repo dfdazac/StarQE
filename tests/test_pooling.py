@@ -5,7 +5,7 @@ import pytest
 import torch
 import unittest_templates
 
-from mphrqe.data.mapping import get_entity_mapper
+from gqs.mapping import get_entity_mapper
 from mphrqe.layer.pooling import GraphPooling, SumGraphPooling, TargetPooling
 
 
