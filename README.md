@@ -1,5 +1,14 @@
 # Query Embedding on Hyper-Relational Knowledge Graphs
 
+## Installation with gqs
+
+```shell
+conda create -n hqeqs python=3.11
+conda activate hqeqs
+pip install -e .
+pip install pyg_lib torch_scatter torch_sparse -f https://data.pyg.org/whl/torch-2.3.0+cu118.html
+```
+
 <p align="center">
 <img src="https://img.shields.io/badge/python-3.8-blue.svg">
 <a href="https://github.com/DimitrisAlivas/mphrqe/blob/master/LICENSE">
