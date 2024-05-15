@@ -105,7 +105,8 @@ def filter_ranks(
 
 def score_to_rank_multi_target(
     scores: FloatTensor,
-    targets: LongTensor,
+    hard_targets: LongTensor,
+    easy_targets: LongTensor,
     average: str = MICRO_AVERAGE,
 ) -> _Ranks:
     """
@@ -113,8 +114,10 @@ def score_to_rank_multi_target(
 
     :param scores: shape: (batch_size, num_choices)
         The scores for all choices.
-    :param targets: shape: (2, num_true_choices)
-        The true choices, as pairs (batch_id, entity_id).
+    :param hard_targets: shape: (2, num_hard_targets)
+        Answers as pairs (batch_id, entity_id) that cannot be obtained with traversal
+    :param easy_targets: shape: (2, num_easy_targets)
+        Answers as pairs (batch_id, entity_id) that can be obtained with traversal
     :param average:
         'micro':
             Calculate metrics globally by counting the total true positives, false negatives and false positives.
@@ -126,8 +129,11 @@ def score_to_rank_multi_target(
         A rank object comprising the filtered optimistic, realistic, pessimistic, and expected ranks, and weights in
         case macro is selected.
     """
+    num_hard_targets = hard_targets.shape[1]
+
     # scores: (batch_size, num_entities)
     # targets: (2, nnz)
+    targets = torch.cat((hard_targets, easy_targets), dim=-1)
     batch_id, entity_id = targets
     # get positive scores: shape: (nnz,)
     positive_scores = scores[batch_id, entity_id]
@@ -138,6 +144,10 @@ def score_to_rank_multi_target(
     # filter ranks
     ranks.optimistic = filter_ranks(ranks=ranks.optimistic, batch_id=batch_id)
     ranks.pessimistic = filter_ranks(ranks=ranks.pessimistic, batch_id=batch_id)
+
+    # Compute metrics for hard targets only
+    ranks.optimistic = ranks.optimistic[:, :num_hard_targets]
+    ranks.pessimistic = ranks.pessimistic[:, :num_hard_targets]
 
     if average == MICRO_AVERAGE:
         uniq, counts = batch_id.unique(return_counts=True)
@@ -164,7 +174,8 @@ class ScoreAggregator:
     def process_scores_(
         self,
         scores: torch.FloatTensor,
-        targets: torch.LongTensor,
+        hard_targets: torch.LongTensor,
+        easy_targets: torch.LongTensor
     ) -> None:
         """
         Process a batch of scores.
@@ -173,8 +184,10 @@ class ScoreAggregator:
 
         :param scores: shape: (batch_size, num_choices)
             The scores for each batch element.
-        :param targets: shape: (2, nnz)
-            The answer entities, in format (batch_id, entity_id).
+        :param hard_targets: shape: (2, nnz)
+            The answer entities, in format (batch_id, entity_id) that cannot be obtained with traversal
+        :param easy_targets: shape: (2, nnz)
+            The answer entities, in format (batch_id, entity_id) that can be obtained with traversal
         """
         raise NotImplementedError
 
@@ -288,14 +301,16 @@ class RankingMetricAggregator(ScoreAggregator):
     def process_scores_(
         self,
         scores: FloatTensor,
-        targets: LongTensor,
+        hard_targets: LongTensor,
+        easy_targets: LongTensor,
     ) -> None:  # noqa: D102
         if not torch.isfinite(scores).all():
             raise RuntimeError(f"Non-finite scores: {scores}")
 
         ranks = score_to_rank_multi_target(
             scores=scores,
-            targets=targets,
+            hard_targets=hard_targets,
+            easy_targets=easy_targets,
             average=self.average,
         )
         self._aggregators[RANK_OPTIMISTIC].process_ranks(ranks.optimistic, weight=ranks.weight)
@@ -355,8 +370,10 @@ def evaluate(
         # compute pairwise similarity to all entities, shape: (batch_size, num_entities)
         scores = similarity(x=x_query, y=model.x_e)
         # now compute the loss based on labels
-        validation_loss += loss(scores, batch.targets) * scores.shape[0]
-        evaluator.process_scores_(scores=scores, targets=batch.targets.to(model.device))
+        validation_loss += loss(scores, batch.hard_targets) * scores.shape[0]
+        evaluator.process_scores_(scores=scores,
+                                  hard_targets=batch.hard_targets.to(model.device),
+                                  easy_targets=batch.easy_targets.to(model.device))
     return dict(
         loss=validation_loss.item() / len(data_loader),
         **evaluator.finalize(),
