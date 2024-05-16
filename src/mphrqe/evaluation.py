@@ -144,8 +144,8 @@ def score_to_rank_multi_target(
     ranks.pessimistic = filter_ranks(ranks=ranks.pessimistic, batch_id=batch_id)
 
     # Compute metrics for hard targets only
-    ranks.optimistic = ranks.optimistic[:, :num_hard_targets]
-    ranks.pessimistic = ranks.pessimistic[:, :num_hard_targets]
+    ranks.optimistic = ranks.optimistic[:num_hard_targets]
+    ranks.pessimistic = ranks.pessimistic[:num_hard_targets]
 
     if average == MICRO_AVERAGE:
         uniq, counts = batch_id.unique(return_counts=True)

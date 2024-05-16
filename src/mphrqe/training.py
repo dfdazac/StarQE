@@ -52,7 +52,7 @@ def _train_epoch(
 
     epoch_loss = torch.zeros(size=tuple(), device=model.device)
     train_evaluator = RankingMetricAggregator()
-    # batch: QueryGraphBatch
+    batch: QueryGraphBatch
     for batch in tqdm.tqdm(data_loader, desc="Training", unit="batch", unit_scale=True):
         # zero grad
         optimizer.zero_grad()
@@ -62,15 +62,18 @@ def _train_epoch(
         # TODO: Replace model.x_e by features?
         scores = similarity(x=x_query, y=model.x_e)
         # now compute the loss based on labels
-        targets = batch.targets.to(model.device)
-        loss_value = loss(scores, targets)
+        easy_targets = batch.easy_targets.to(model.device)
+        hard_targets = batch.hard_targets.to(model.device)
+        loss_value = loss(scores, easy_targets)
         # backward pass
         loss_value.backward()
         # update parameters
         optimizer.step()
         # accumulate on device
         epoch_loss += loss_value.detach() * scores.shape[0]
-        train_evaluator.process_scores_(scores=scores, targets=targets)
+        train_evaluator.process_scores_(scores=scores,
+                                        hard_targets=hard_targets,
+                                        easy_targets=easy_targets)
     return dict(
         loss=epoch_loss.item() / len(data_loader),
         **train_evaluator.finalize(),

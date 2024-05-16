@@ -362,7 +362,7 @@ def train_cli(
     )
 
     model = StarEQueryEmbeddingModel(
-        num_entities=dataset.entity_mapper.number_of_real_entities() + 3,  # we add a target, a variable and a blank node embedding
+        num_entities=dataset.entity_mapper.number_of_entities_and_reified_relations_without_vars_and_targets() + 3,  # we add a target, a variable and a blank node embedding
         num_relations=dataset.relation_mapper.get_largest_forward_relation_id() + 1,
         embedding_dim=embedding_dim,
         num_layers=num_layers,
