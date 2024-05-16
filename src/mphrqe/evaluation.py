@@ -1,8 +1,6 @@
 """Evaluation utilities."""
 import dataclasses
 import logging
-import os
-import pathlib
 from abc import abstractmethod
 from typing import Collection, List, Mapping, MutableMapping, Optional, Tuple, Union, cast
 
