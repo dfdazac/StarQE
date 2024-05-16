@@ -3,7 +3,8 @@ from typing import Union
 
 import torch
 from class_resolver import Resolver
-from torch import Module, nn
+from torch import nn
+from torch.nn import Module
 from torch_scatter import scatter_add, scatter_max
 
 __all__ = [
