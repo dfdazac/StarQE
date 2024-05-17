@@ -19,6 +19,7 @@ from .similarity import Similarity
 from .typing import FloatTensor, LongTensor
 
 __all__ = [
+    "SetPrecisionAggregator",
     "RankingMetricAggregator",
     "evaluate",
 ]
@@ -199,6 +200,53 @@ class ScoreAggregator:
         raise NotImplementedError
 
 
+class SetPrecisionAggregator(ScoreAggregator):
+    """An aggregator for computing precision based on sets of predicted
+    and true (easy and hard) answers.
+
+    :param threshold: Scores above this threshold are considered predicted answers.
+    """
+    def __init__(self, threshold: float = 0.0):
+        self.threshold = threshold
+        self._batch_sizes: List[int] = []
+        self._mean_precisions: List[float] = []
+
+    @torch.no_grad()
+    def process_scores_(
+            self,
+            scores: FloatTensor,
+            hard_targets: LongTensor,
+            easy_targets: LongTensor,
+    ) -> None:  # noqa: D102
+        batch_size = scores.shape[0]
+        batch_id, targets = torch.cat((hard_targets, easy_targets), dim=-1)
+        true_answers = torch.zeros_like(scores, dtype=torch.bool)
+        true_answers[batch_id, targets] = True
+
+        pred_answers = scores > self.threshold
+        num_pred_answers = pred_answers.sum(dim=-1)
+
+        true_positives = torch.logical_and(pred_answers, true_answers)
+        precision = true_positives.sum(dim=-1) / num_pred_answers.sum(dim=-1)
+
+        # Map NaNs due to no predicted answers to 0 precision
+        precision[num_pred_answers == 0] = 0
+
+        self._batch_sizes.append(batch_size)
+        self._mean_precisions.append(precision.mean().item())
+
+    def finalize(self) -> Mapping[str, float]:  # noqa: D102
+        batch_sizes = torch.tensor(self._batch_sizes)
+        num_scores = batch_sizes.sum()
+        mean_precision = torch.tensor(self._mean_precisions)
+        mean_precision = (mean_precision * batch_sizes).sum() / num_scores
+
+        result = {'num_scores': num_scores.item(),
+                  'mean_precision': mean_precision.item()}
+
+        return result
+
+
 def _weighted_mean(
     tensor: torch.Tensor,
     weight: Optional[torch.Tensor],
@@ -342,6 +390,7 @@ def evaluate(
     model: QueryEmbeddingModel,
     similarity: Similarity,
     loss: QueryEmbeddingLoss,
+    threshold: float,
 ) -> Mapping[str, float]:
     """
     Evaluate query embedding model.
@@ -354,13 +403,16 @@ def evaluate(
         The similarity instance.
     :param loss:
         The loss instance.
+    :param threshold:
+        Scores above this threshold are considered answers.
 
     :return:
         A dictionary of results.
     """
     # set model into evaluation mode
     model.eval()
-    evaluator = RankingMetricAggregator()
+    ranking_evaluator = RankingMetricAggregator()
+    precision_evaluator = SetPrecisionAggregator(threshold)
     validation_loss = torch.zeros(size=tuple(), device=model.device)
     for batch in tqdm(data_loader, desc="Evaluation", unit="batch", unit_scale=True):
         # embed query
@@ -369,12 +421,20 @@ def evaluate(
         scores = similarity(x=x_query, y=model.x_e)
         # now compute the loss based on labels
         validation_loss += loss(scores, batch.hard_targets) * scores.shape[0]
-        evaluator.process_scores_(scores=scores,
-                                  hard_targets=batch.hard_targets.to(model.device),
-                                  easy_targets=batch.easy_targets.to(model.device))
+
+        hard_targets = batch.hard_targets.to(model.device)
+        easy_targets = batch.easy_targets.to(model.device)
+
+        ranking_evaluator.process_scores_(scores=scores,
+                                          hard_targets=hard_targets,
+                                          easy_targets=easy_targets)
+        precision_evaluator.process_scores_(scores=scores,
+                                            hard_targets=hard_targets,
+                                            easy_targets=easy_targets)
     return dict(
         loss=validation_loss.item() / len(data_loader),
-        **evaluator.finalize(),
+        **ranking_evaluator.finalize(),
+        **precision_evaluator.finalize()
     )
 
 

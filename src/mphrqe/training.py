@@ -90,6 +90,7 @@ def train_iter(
     device: Optional[torch.device] = None,
     num_epochs: int = 1,
     evaluation_frequency: int = 1,
+    threshold: float = 0.0,
     result_callback: Optional[Callable[[Mapping[str, Any]], None]] = None,
     early_stopper_kwargs: OptionalKwargs = None,
     overwrite_with_best_model: bool = True,
@@ -147,6 +148,7 @@ def train_iter(
                     model=model,
                     similarity=similarity,
                     loss=loss_instance,
+                    threshold=threshold,
                 )
             should_stop = early_stopper.report_result(
                 result=result,

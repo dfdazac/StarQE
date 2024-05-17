@@ -217,6 +217,12 @@ option_learning_rate = click.option(
     type=float,
     default=0.001,
 )
+option_threshold = click.option(
+    '-th',
+    '--threshold',
+    type=float,
+    default=0.0,
+)
 option_batch_size = click.option(
     "-b",
     "--batch-size",
@@ -293,6 +299,7 @@ def main():
 # optimizer + training options
 @option_epochs
 @option_learning_rate
+@option_threshold
 @option_batch_size
 @option_optimizer
 # save options
@@ -328,6 +335,7 @@ def train_cli(
     # optimizer + training
     epochs: int,
     learning_rate: float,
+    threshold: float,
     batch_size: int,
     optimizer: str,
     # decoder
@@ -390,6 +398,7 @@ def train_cli(
         ),
         num_epochs=epochs,
         result_callback=result_callback,
+        threshold=threshold,
         early_stopper_kwargs=dict(
             key=("validation", f"{RANK_REALISTIC}.hits_at_10"),
             patience=5,
@@ -433,6 +442,7 @@ def train_cli(
     type=int,
     default=None,
 )
+@option_threshold
 # logging options
 @option_log_level
 # load options
@@ -451,6 +461,7 @@ def evaluate_cli(
     wandb_group: str,
     # evaluation
     batch_size: Optional[int],
+    threshold: float,
     # logging
     log_level: str,
     # saving
@@ -525,6 +536,7 @@ def evaluate_cli(
             model=model,
             similarity=similarity,
             loss=loss_instance,
+            threshold=threshold,
         )
     logger.info(f"Evaluation result: {pprint.pformat(result, indent=2)}")
     if result_callback:
