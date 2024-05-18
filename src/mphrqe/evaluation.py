@@ -230,7 +230,7 @@ class SetPrecisionAggregator(ScoreAggregator):
         num_pred_answers = pred_answers.sum(dim=-1)
 
         true_positives = torch.logical_and(pred_answers, true_answers)
-        precision = true_positives.sum(dim=-1) / num_pred_answers.sum(dim=-1)
+        precision = true_positives.sum(dim=-1) / num_pred_answers
 
         # Map NaNs due to no predicted answers to 0 precision
         precision[num_pred_answers == 0] = 0
