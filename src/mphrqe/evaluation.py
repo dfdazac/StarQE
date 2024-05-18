@@ -148,6 +148,9 @@ def score_to_rank_multi_target(
     ranks.optimistic = ranks.optimistic[:num_hard_targets]
     ranks.pessimistic = ranks.pessimistic[:num_hard_targets]
 
+    # Compute expected rank with hard answers only
+    batch_id = batch_id[:num_hard_targets]
+
     if average == MICRO_AVERAGE:
         uniq, counts = batch_id.unique(return_counts=True)
     elif average == MACRO_AVERAGE:
