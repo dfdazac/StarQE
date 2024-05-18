@@ -11,6 +11,8 @@ def init_tracker(
     config: Mapping[str, Any],
     use_wandb: bool,
     information: Mapping[str, Any],
+    wandb_project: str,
+    wandb_entity: str,
     wandb_name: Optional[str] = None,
     wandb_group: Optional[str] = None,
     is_hpo: bool = False,
@@ -22,12 +24,16 @@ def init_tracker(
         The configuration to log to the tracker.
     :param use_wandb:
         Whether to use wandb.
+    :param information:
+        The data information to log.
+    :param wandb_project:
+        The wandb project name.
+    :param wandb_entity:
+        The wandb entity name (e.g. username).
     :param wandb_name:
         The wandb experiment name.
     :param wandb_group:
         The wandb group name.
-    :param information:
-        The data information to log.
     :param is_hpo:
         Whether this is an HPO run and should be grouped under the wandb_name.
 
@@ -48,11 +54,12 @@ def init_tracker(
 
                     pip install wandb
             """)) from e
+
         name = wandb_name if not is_hpo else None
         group = wandb_name if is_hpo else wandb_group
         wandb_run = cast(
             wandb.wandb_sdk.wandb_run.Run,
-            wandb.init(project="stare_query", entity="hyperquery", name=name, reinit=True, group=group),
+            wandb.init(project=wandb_project, entity=wandb_entity, name=name, reinit=True, group=group),
         )
         # All wandb information needs to be collected and then stored as one action on the root of the config object.
         wandb_run.config.update(config)

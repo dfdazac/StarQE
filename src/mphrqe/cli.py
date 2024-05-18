@@ -88,6 +88,16 @@ option_use_wandb = click.option(
     "--use-wandb",
     is_flag=True,
 )
+option_wandb_project = click.option(
+    "-wp",
+    "--wandb-project",
+    default=None
+)
+option_wandb_entity = click.option(
+    "-we",
+    "--wandb-entity",
+    default=None
+)
 option_wandb_name = click.option(
     "-n",
     "--wandb-name",
@@ -276,6 +286,8 @@ def main():
 @option_num_workers
 # wandb options
 @option_use_wandb
+@option_wandb_project
+@option_wandb_entity
 @option_wandb_name
 @option_wandb_group
 # logging options
@@ -314,6 +326,8 @@ def train_cli(
     num_workers: int,
     # wandb
     use_wandb: bool,
+    wandb_project: str,
+    wandb_entity: str,
     wandb_name: str,
     wandb_group: str,
     # logging
@@ -365,6 +379,8 @@ def train_cli(
         use_wandb=use_wandb,
         wandb_name=wandb_name,
         information=information.info,
+        wandb_project=wandb_project,
+        wandb_entity=wandb_entity,
         wandb_group=wandb_group,
         is_hpo=False,
     )
@@ -433,6 +449,8 @@ def train_cli(
 @option_num_workers
 # wandb options
 @option_use_wandb
+@option_wandb_project
+@option_wandb_entity
 @option_wandb_name
 @option_wandb_group
 # evaluation options
@@ -457,6 +475,8 @@ def evaluate_cli(
     num_workers: int,
     # wandb
     use_wandb: bool,
+    wandb_project: str,
+    wandb_entity: str,
     wandb_name: str,
     wandb_group: str,
     # evaluation
@@ -520,6 +540,8 @@ def evaluate_cli(
     result_callback = init_tracker(
         config=config,
         use_wandb=use_wandb,
+        wandb_project=wandb_project,
+        wandb_entity=wandb_entity,
         wandb_name=wandb_name,
         wandb_group=wandb_group,
         information=information.info,
@@ -556,6 +578,8 @@ METRICS = {
 @option_validation_data
 @option_test_data
 @option_use_wandb
+@option_wandb_project
+@option_wandb_entity
 @option_wandb_name
 @option_num_workers
 @option_log_level
@@ -571,6 +595,8 @@ def optimize_cli(
     num_workers: int,
     # wandb options
     use_wandb: bool,
+    wandb_project: str,
+    wandb_entity: str,
     wandb_name: str,
     # logging options
     log_level: str,
@@ -586,6 +612,8 @@ def optimize_cli(
         validation_data=validation_data,
         test_data=test_data,
         use_wandb=use_wandb,
+        wandb_project=wandb_project,
+        wandb_entity=wandb_entity,
         wandb_name=wandb_name,
         num_workers=num_workers,
         num_trials=num_trials,
