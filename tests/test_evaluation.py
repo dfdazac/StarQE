@@ -18,9 +18,11 @@ def _test_score_to_rank_multi_target(average: str):
         torch.randint(high=batch_size, size=(num_positives,)),
         torch.randint(high=num_entities, size=(num_positives,)),
     ], dim=0)
+    easy_targets = torch.empty(2, 0, dtype=torch.long)
     ranks_ = score_to_rank_multi_target(
         scores=scores,
-        targets=targets,
+        hard_targets=targets,
+        easy_targets=easy_targets,
         average=average,
     )
     _verify_ranks(ranks_, average, num_entities, num_positives)
@@ -56,13 +58,13 @@ def test_score_to_rank_infinity():
     scores = torch.full(size=(batch_size, num_entities),
                         fill_value=float("inf"))
     targets = torch.stack([
-        torch.randint(high=batch_size, size=(num_positives * 2,)),
-        torch.randint(high=num_entities, size=(num_positives * 2,)),
+        torch.randint(high=batch_size, size=(num_positives,)),
+        torch.randint(high=num_entities, size=(num_positives,)),
     ], dim=0)
-    hard_targets, easy_targets = torch.chunk(targets, chunks=2, dim=-1)
+    easy_targets = torch.empty(2, 0, dtype=torch.long)
     ranks_ = score_to_rank_multi_target(
         scores=scores,
-        hard_targets=hard_targets,
+        hard_targets=targets,
         easy_targets=easy_targets,
         average=MACRO_AVERAGE,
     )
@@ -73,6 +75,7 @@ def test_score_to_rank_infinity():
 def test_score_to_rank_multi_target_manual():
     """Test score_to_rank_multi_target on a manual curated examples."""
     targets = torch.as_tensor(data=[[0, 0], [0, 1], [1, 0]]).t()
+    easy_targets = torch.zeros(2, 0, dtype=torch.long)
     scores = torch.as_tensor(data=[
         [1.0, 2.0, 3.0, 4.0],
         [3.0, 2.0, 3.0, 4.0],
@@ -82,7 +85,8 @@ def test_score_to_rank_multi_target_manual():
     expected_expected_rank_micro = torch.as_tensor(data=[2.0, 2.0, 2.5])
     micro_ranks_ = score_to_rank_multi_target(
         scores=scores,
-        targets=targets,
+        hard_targets=targets,
+        easy_targets=easy_targets,
         average=MICRO_AVERAGE,
     )
     assert torch.allclose(micro_ranks_.expected_rank,
@@ -93,7 +97,8 @@ def test_score_to_rank_multi_target_manual():
     expected_expected_rank_macro = torch.as_tensor(data=[2.0, 2.0, 2.5])
     macro_ranks_ = score_to_rank_multi_target(
         scores=scores,
-        targets=targets,
+        hard_targets=targets,
+        easy_targets=easy_targets,
         average=MACRO_AVERAGE,
     )
     assert torch.allclose(macro_ranks_.expected_rank,
@@ -104,9 +109,9 @@ def test_score_to_rank_multi_target_manual():
 
 def _test_evaluator(average: str):
     # reproducible testing
-    generator = torch.manual_seed(seed=42)
-    device = torch.device(
-        "cuda") if torch.cuda.is_available() else torch.device("cpu")
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    generator = torch.Generator(device=device)
+    generator.manual_seed(42)
     evaluator = RankingMetricAggregator(average=average)
     batch_size = 2
     num_entities = 5
@@ -122,10 +127,12 @@ def _test_evaluator(average: str):
             torch.randint(high=num_entities, size=(nnz,), device=device,
                           generator=generator),
         ], dim=0)
+        easy_targets = torch.empty(2, 0, dtype=torch.long, device=device)
         num_non_empty_queries += targets[0].unique().shape[0]
         evaluator.process_scores_(
             scores=scores,
-            targets=targets,
+            hard_targets=targets,
+            easy_targets=easy_targets,
         )
     results = evaluator.finalize()
     if average == MICRO_AVERAGE:
