@@ -8,7 +8,7 @@ from class_resolver import HintOrType, OptionalKwargs
 from pykeen.utils import resolve_device
 from pykeen.optimizers import optimizer_resolver
 
-from .data import QueryGraphBatch
+from gqs.loader import QueryGraphBatch
 from .early_stopping import EarlyStopper
 from .evaluation import RankingMetricAggregator, evaluate
 from .loss import QueryEmbeddingLoss, query_embedding_loss_resolver
@@ -52,7 +52,7 @@ def _train_epoch(
 
     epoch_loss = torch.zeros(size=tuple(), device=model.device)
     train_evaluator = RankingMetricAggregator()
-    # batch: QueryGraphBatch
+    batch: QueryGraphBatch
     for batch in tqdm.tqdm(data_loader, desc="Training", unit="batch", unit_scale=True):
         # zero grad
         optimizer.zero_grad()
@@ -62,15 +62,18 @@ def _train_epoch(
         # TODO: Replace model.x_e by features?
         scores = similarity(x=x_query, y=model.x_e)
         # now compute the loss based on labels
-        targets = batch.targets.to(model.device)
-        loss_value = loss(scores, targets)
+        easy_targets = batch.easy_targets.to(model.device)
+        hard_targets = batch.hard_targets.to(model.device)
+        loss_value = loss(scores, easy_targets)
         # backward pass
         loss_value.backward()
         # update parameters
         optimizer.step()
         # accumulate on device
         epoch_loss += loss_value.detach() * scores.shape[0]
-        train_evaluator.process_scores_(scores=scores, targets=targets)
+        train_evaluator.process_scores_(scores=scores,
+                                        hard_targets=hard_targets,
+                                        easy_targets=easy_targets)
     return dict(
         loss=epoch_loss.item() / len(data_loader),
         **train_evaluator.finalize(),
@@ -87,6 +90,7 @@ def train_iter(
     device: Optional[torch.device] = None,
     num_epochs: int = 1,
     evaluation_frequency: int = 1,
+    threshold: float = 0.0,
     result_callback: Optional[Callable[[Mapping[str, Any]], None]] = None,
     early_stopper_kwargs: OptionalKwargs = None,
     overwrite_with_best_model: bool = True,
@@ -144,6 +148,7 @@ def train_iter(
                     model=model,
                     similarity=similarity,
                     loss=loss_instance,
+                    threshold=threshold,
                 )
             should_stop = early_stopper.report_result(
                 result=result,

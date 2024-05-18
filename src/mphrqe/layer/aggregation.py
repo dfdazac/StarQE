@@ -4,7 +4,7 @@ from typing import Any, Mapping, Optional
 
 import torch
 import torch_scatter
-from class_resolver import HintOrType, Resolver
+from class_resolver import ClassResolver, HintOrType, Resolver
 from torch import nn
 
 from .util import activation_resolver, get_parameter, softmax
@@ -255,7 +255,7 @@ class AttentionQualifierAggregation(QualifierAggregation):
         return torch_scatter.scatter_add(src=x_q, index=edge_ids, dim=0, dim_size=x_edge.shape[0])
 
 
-qualifier_aggregation_resolver = Resolver.from_subclasses(
+qualifier_aggregation_resolver: ClassResolver[QualifierAggregation] = Resolver.from_subclasses(
     base=QualifierAggregation,  # type: ignore
     default=SumQualifierAggregation,
 )

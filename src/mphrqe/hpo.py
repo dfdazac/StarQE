@@ -1,18 +1,19 @@
 """Hyperparameter optimization with Optuna."""
 import dataclasses
 import logging
-import pathlib
 import pprint
-from typing import List, Optional, Sequence, Tuple, cast
+from typing import Optional, Sequence, Tuple
 
 import optuna
 from class_resolver import HintOrType, Resolver
 from optuna import Trial
 from optuna.pruners import BasePruner, MedianPruner, NopPruner
-from pykeen.evaluation.rank_based_evaluator import RANK_REALISTIC
+from .evaluation import RANK_REALISTIC
 
-from .data.loader import get_query_data_loaders, resolve_sample
-from .data.mapping import get_entity_mapper, get_relation_mapper
+from gqs.loader import get_query_data_loaders
+from gqs.sample import resolve_sample
+from gqs.dataset import Dataset
+
 from .layer.composition import composition_resolver
 from .layer.pooling import SumGraphPooling, graph_pooling_resolver
 from .layer.util import activation_resolver
@@ -21,7 +22,7 @@ from .models import StarEQueryEmbeddingModel
 from .similarity import similarity_resolver
 from .tracking import init_tracker
 from .training import optimizer_resolver, train_iter
-from .utils import get_from_nested_dict
+from .utils import get_from_nested_dict  # type: ignore
 
 __all__ = [
     "optimize",
@@ -34,10 +35,10 @@ logger = logging.getLogger(__name__)
 class Objective:
     """An objective for optuna."""
     # Data
-    data_root: pathlib.Path
-    train_data: List[str]
-    validation_data: List[str]
-    test_data: List[str]
+    dataset: Dataset
+    train_data: list[str]
+    validation_data: list[str]
+    test_data: list[str]
 
     use_wandb: bool
     wandb_name: Optional[str] = None
@@ -73,7 +74,7 @@ class Objective:
         learning_rate = trial.suggest_float(name="learning_rate", low=self.lr_range[0], high=self.lr_range[1], log=True)
         log2_batch_size = trial.suggest_int(name="log2_batch_size", low=self.log2_batch_size_range[0], high=self.log2_batch_size_range[1])
         batch_size = 2 ** log2_batch_size
-        similarity = cast(str, trial.suggest_categorical(name="similarity", choices=list(similarity_resolver.lookup_dict.keys())))
+        similarity = trial.suggest_categorical(name="similarity", choices=list(similarity_resolver.lookup_dict.keys()))
         composition: Optional[str]
         qualifier_composition: Optional[str]
         activation: Optional[str]
@@ -84,14 +85,14 @@ class Objective:
             composition = composition_resolver.normalize("MultiplicationComposition")
             # trial.suggest_categorical(name="qualifier_composition", choices=composition_resolver.lookup_dict.keys())
             qualifier_composition = composition
-            message_weighting = cast(str, trial.suggest_categorical(name="message_weighting", choices=list(message_weighting_resolver.lookup_dict.keys())))
+            message_weighting = trial.suggest_categorical(name="message_weighting", choices=list(message_weighting_resolver.lookup_dict.keys()))
             dropout = trial.suggest_float(name="dropout", low=0.0, high=0.8, step=0.1)
-            use_bias = cast(bool, trial.suggest_categorical(name="use_bias", choices=[False, True]))
-            activation = cast(str, trial.suggest_categorical(name="activation", choices=[
+            use_bias = trial.suggest_categorical(name="use_bias", choices=[False, True])
+            activation = trial.suggest_categorical(name="activation", choices=[
                 activation_resolver.normalize(name)
                 for name in ("LeakyReLU", "Identity", "PReLU", "ReLU")
-            ]))
-            graph_pooling = cast(str, trial.suggest_categorical(name="graph_pooling", choices=list(graph_pooling_resolver.lookup_dict.keys())))
+            ])
+            graph_pooling = trial.suggest_categorical(name="graph_pooling", choices=list(graph_pooling_resolver.lookup_dict.keys()))
         else:
             composition = qualifier_composition = message_weighting = activation = None
             use_bias = False
@@ -114,7 +115,7 @@ class Objective:
             use_bias=use_bias,
             graph_pooling=graph_pooling,
             # fixed parameters
-            data_root=self.data_root,
+            dataset=self.dataset,
             epochs=self.max_num_epoch,
             optimizer=self.optimizer,
             log_level=self.log_level,
@@ -133,10 +134,10 @@ class Objective:
         similarity_instance = similarity_resolver.lookup(similarity)
 
         data_loaders, information = get_query_data_loaders(
-            data_root=self.data_root,
+            dataset=self.dataset,
             train=map(resolve_sample, self.train_data),
             validation=map(resolve_sample, self.validation_data),
-            test=map(resolve_sample, []),
+            test=[],  # map(resolve_sample, []),
             batch_size=batch_size,
             num_workers=self.num_workers,
         )
@@ -146,8 +147,8 @@ class Objective:
                 assert len(data_loader) >= 1, \
                     f"All data splits used must be larger than the batch size {batch_size}. Could not create a single batch."
         model_instance = StarEQueryEmbeddingModel(
-            num_entities=get_entity_mapper().get_largest_embedding_id() + 1,
-            num_relations=get_relation_mapper().get_largest_forward_relation_id() + 1,
+            num_entities=self.dataset.entity_mapper.number_of_real_entities() + 3,  # we add a target, a variable and a blank node embedding,
+            num_relations=self.dataset.relation_mapper.get_largest_forward_relation_id() + 1,
             embedding_dim=embedding_dim,
             num_layers=num_layers,
             dropout=dropout,
@@ -164,7 +165,7 @@ class Objective:
             config=config,
             use_wandb=self.use_wandb,
             wandb_name=self.wandb_name,
-            information=information,
+            information=information.info,
             is_hpo=True,
         )
 
@@ -212,17 +213,17 @@ pruner_resolver: Resolver[BasePruner] = Resolver.from_subclasses(
 
 
 def optimize(
-    data_root: pathlib.Path,
-    train_data: List[str],
-    validation_data: List[str],
-    test_data: List[str],
+    dataset: Dataset,
+    train_data: list[str],
+    validation_data: list[str],
+    test_data: list[str],
     use_wandb: bool,
     num_workers: int,
     num_trials: Optional[int],
     timeout: Optional[float],
     log_level: str,
     wandb_name: Optional[str] = None,
-    pruner: HintOrType[BasePruner] = MedianPruner,
+    pruner: HintOrType[BasePruner] = MedianPruner(),
     metric: Sequence[str] = ("validation", f"{RANK_REALISTIC}.hits_at_10"),
     direction: str = "maximize",
     num_layers: Optional[int] = None,
@@ -230,14 +231,14 @@ def optimize(
     """
     Optimize hyperparameters with Optuna.
 
-    :param data_root:
-        The data root, i.e., the directory containing the binarized queries.
+    :param dataset:
+        The Dataset to take all queries from.
     :param train_data:
-        A train data selector, cf. :class:`mphrqe.data.loader.Sample`.
+        A train data selector, cf. :class:`gqe.sample.Sample`.
     :param validation_data:
-        A validation data selector, cf. :class:`mphrqe.data.loader.Sample`.
+        A validation data selector, cf. :class:`gqe.sample.Sample`.
     :param test_data:
-        A test data selector, cf. :class:`mphrqe.data.loader.Sample`.
+        A test data selector, cf. :class:`gqe.sample.Sample`.
     :param use_wandb:
         Whether to use weights and biases for result tracking.
     :param wandb_name:
@@ -275,7 +276,7 @@ def optimize(
 
     # setup objective
     objective = Objective(
-        data_root=data_root,
+        dataset=dataset,
         train_data=train_data,
         test_data=test_data,
         validation_data=validation_data,

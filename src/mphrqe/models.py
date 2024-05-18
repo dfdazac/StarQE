@@ -8,7 +8,7 @@ import torch
 from class_resolver import HintOrType
 from torch import nn
 
-from .data import QueryGraphBatch
+from gqs.loader import QueryGraphBatch
 from .layer import StarEConvLayer
 from .layer.aggregation import QualifierAggregation
 from .layer.composition import Composition

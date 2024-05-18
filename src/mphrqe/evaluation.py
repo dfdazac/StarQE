@@ -1,26 +1,25 @@
 """Evaluation utilities."""
 import dataclasses
 import logging
-import os
-import pathlib
 from abc import abstractmethod
 from typing import Collection, List, Mapping, MutableMapping, Optional, Tuple, Union, cast
 
 import numpy
 import pandas
 import torch
-import torch.utils.data
+from torch.utils.data import DataLoader
 from pykeen.typing import RANK_OPTIMISTIC, RANK_PESSIMISTIC, RANK_REALISTIC, RANK_TYPES
 from tqdm.auto import tqdm
 
-from .data import QueryGraphBatch
-from .data.mapping import get_entity_mapper
+from gqs.loader import QueryGraphBatch
+# from .data.mapping import get_entity_mapper
 from .loss import QueryEmbeddingLoss
 from .models import QueryEmbeddingModel
 from .similarity import Similarity
 from .typing import FloatTensor, LongTensor
 
 __all__ = [
+    "SetPrecisionAggregator",
     "RankingMetricAggregator",
     "evaluate",
 ]
@@ -105,7 +104,8 @@ def filter_ranks(
 
 def score_to_rank_multi_target(
     scores: FloatTensor,
-    targets: LongTensor,
+    hard_targets: LongTensor,
+    easy_targets: LongTensor,
     average: str = MICRO_AVERAGE,
 ) -> _Ranks:
     """
@@ -113,8 +113,10 @@ def score_to_rank_multi_target(
 
     :param scores: shape: (batch_size, num_choices)
         The scores for all choices.
-    :param targets: shape: (2, num_true_choices)
-        The true choices, as pairs (batch_id, entity_id).
+    :param hard_targets: shape: (2, num_hard_targets)
+        Answers as pairs (batch_id, entity_id) that cannot be obtained with traversal
+    :param easy_targets: shape: (2, num_easy_targets)
+        Answers as pairs (batch_id, entity_id) that can be obtained with traversal
     :param average:
         'micro':
             Calculate metrics globally by counting the total true positives, false negatives and false positives.
@@ -126,8 +128,11 @@ def score_to_rank_multi_target(
         A rank object comprising the filtered optimistic, realistic, pessimistic, and expected ranks, and weights in
         case macro is selected.
     """
+    num_hard_targets = hard_targets.shape[1]
+
     # scores: (batch_size, num_entities)
     # targets: (2, nnz)
+    targets = torch.cat((hard_targets, easy_targets), dim=-1)
     batch_id, entity_id = targets
     # get positive scores: shape: (nnz,)
     positive_scores = scores[batch_id, entity_id]
@@ -138,6 +143,13 @@ def score_to_rank_multi_target(
     # filter ranks
     ranks.optimistic = filter_ranks(ranks=ranks.optimistic, batch_id=batch_id)
     ranks.pessimistic = filter_ranks(ranks=ranks.pessimistic, batch_id=batch_id)
+
+    # Compute metrics for hard targets only
+    ranks.optimistic = ranks.optimistic[:num_hard_targets]
+    ranks.pessimistic = ranks.pessimistic[:num_hard_targets]
+
+    # Compute expected rank with hard answers only
+    batch_id = batch_id[:num_hard_targets]
 
     if average == MICRO_AVERAGE:
         uniq, counts = batch_id.unique(return_counts=True)
@@ -164,7 +176,8 @@ class ScoreAggregator:
     def process_scores_(
         self,
         scores: torch.FloatTensor,
-        targets: torch.LongTensor,
+        hard_targets: torch.LongTensor,
+        easy_targets: torch.LongTensor
     ) -> None:
         """
         Process a batch of scores.
@@ -173,8 +186,10 @@ class ScoreAggregator:
 
         :param scores: shape: (batch_size, num_choices)
             The scores for each batch element.
-        :param targets: shape: (2, nnz)
-            The answer entities, in format (batch_id, entity_id).
+        :param hard_targets: shape: (2, nnz)
+            The answer entities, in format (batch_id, entity_id) that cannot be obtained with traversal
+        :param easy_targets: shape: (2, nnz)
+            The answer entities, in format (batch_id, entity_id) that can be obtained with traversal
         """
         raise NotImplementedError
 
@@ -186,6 +201,53 @@ class ScoreAggregator:
             A mapping from metric names to the scalar metric values.
         """
         raise NotImplementedError
+
+
+class SetPrecisionAggregator(ScoreAggregator):
+    """An aggregator for computing precision based on sets of predicted
+    and true (easy and hard) answers.
+
+    :param threshold: Scores above this threshold are considered predicted answers.
+    """
+    def __init__(self, threshold: float = 0.0):
+        self.threshold = threshold
+        self._batch_sizes: List[int] = []
+        self._mean_precisions: List[float] = []
+
+    @torch.no_grad()
+    def process_scores_(
+            self,
+            scores: FloatTensor,
+            hard_targets: LongTensor,
+            easy_targets: LongTensor,
+    ) -> None:  # noqa: D102
+        batch_size = scores.shape[0]
+        batch_id, targets = torch.cat((hard_targets, easy_targets), dim=-1)
+        true_answers = torch.zeros_like(scores, dtype=torch.bool)
+        true_answers[batch_id, targets] = True
+
+        pred_answers = scores > self.threshold
+        num_pred_answers = pred_answers.sum(dim=-1)
+
+        true_positives = torch.logical_and(pred_answers, true_answers)
+        precision = true_positives.sum(dim=-1) / num_pred_answers
+
+        # Map NaNs due to no predicted answers to 0 precision
+        precision[num_pred_answers == 0] = 0
+
+        self._batch_sizes.append(batch_size)
+        self._mean_precisions.append(precision.mean().item())
+
+    def finalize(self) -> Mapping[str, float]:  # noqa: D102
+        batch_sizes = torch.tensor(self._batch_sizes)
+        num_scores = batch_sizes.sum()
+        mean_precision = torch.tensor(self._mean_precisions)
+        mean_precision = (mean_precision * batch_sizes).sum() / num_scores
+
+        result = {'num_scores': num_scores.item(),
+                  'mean_precision': mean_precision.item()}
+
+        return result
 
 
 def _weighted_mean(
@@ -288,14 +350,16 @@ class RankingMetricAggregator(ScoreAggregator):
     def process_scores_(
         self,
         scores: FloatTensor,
-        targets: LongTensor,
+        hard_targets: LongTensor,
+        easy_targets: LongTensor,
     ) -> None:  # noqa: D102
         if not torch.isfinite(scores).all():
             raise RuntimeError(f"Non-finite scores: {scores}")
 
         ranks = score_to_rank_multi_target(
             scores=scores,
-            targets=targets,
+            hard_targets=hard_targets,
+            easy_targets=easy_targets,
             average=self.average,
         )
         self._aggregators[RANK_OPTIMISTIC].process_ranks(ranks.optimistic, weight=ranks.weight)
@@ -303,16 +367,17 @@ class RankingMetricAggregator(ScoreAggregator):
         self._aggregators[RANK_REALISTIC].process_ranks(ranks.realistic, weight=ranks.weight)
         assert ranks.expected_rank is not None
         self._expected_ranks.append(ranks.expected_rank.detach().cpu())
-        self._expected_ranks_weights.append(ranks.weight)
+        if ranks.weight is not None:
+            self._expected_ranks_weights.append(ranks.weight.detach().cpu())
 
     def finalize(self) -> Mapping[str, float]:  # noqa: D102
-        result = dict()
+        result: dict[str, float] = dict()
         for rank_type, agg in self._aggregators.items():
             for key, value in agg.finalize().items():
                 result[f"{rank_type}.{key}"] = value
         self._aggregators.clear()
         # adjusted mean rank (index)
-        if any(w is None for w in self._expected_ranks_weights):
+        if len(self._expected_ranks_weights) == 0 or any(w is None for w in self._expected_ranks_weights):
             weights = None
         else:
             weights = torch.cat(cast(List[torch.Tensor], self._expected_ranks_weights))
@@ -325,10 +390,11 @@ class RankingMetricAggregator(ScoreAggregator):
 
 @torch.no_grad()
 def evaluate(
-    data_loader: torch.utils.data.DataLoader[QueryGraphBatch],
+    data_loader: DataLoader[QueryGraphBatch],
     model: QueryEmbeddingModel,
     similarity: Similarity,
     loss: QueryEmbeddingLoss,
+    threshold: float,
 ) -> Mapping[str, float]:
     """
     Evaluate query embedding model.
@@ -341,67 +407,45 @@ def evaluate(
         The similarity instance.
     :param loss:
         The loss instance.
+    :param threshold:
+        Scores above this threshold are considered answers.
 
     :return:
         A dictionary of results.
     """
     # set model into evaluation mode
     model.eval()
-    evaluator = RankingMetricAggregator()
+    ranking_evaluator = RankingMetricAggregator()
+    precision_evaluator = SetPrecisionAggregator(threshold)
     validation_loss = torch.zeros(size=tuple(), device=model.device)
+    batch: QueryGraphBatch
     for batch in tqdm(data_loader, desc="Evaluation", unit="batch", unit_scale=True):
         # embed query
         x_query = model(batch)
         # compute pairwise similarity to all entities, shape: (batch_size, num_entities)
         scores = similarity(x=x_query, y=model.x_e)
         # now compute the loss based on labels
-        validation_loss += loss(scores, batch.targets) * scores.shape[0]
-        evaluator.process_scores_(scores=scores, targets=batch.targets.to(model.device))
+        validation_loss += loss(scores, batch.hard_targets) * scores.shape[0]
+
+        hard_targets = batch.hard_targets.to(model.device)
+        easy_targets = batch.easy_targets.to(model.device)
+
+        ranking_evaluator.process_scores_(scores=scores,
+                                          hard_targets=hard_targets,
+                                          easy_targets=easy_targets)
+        precision_evaluator.process_scores_(scores=scores,
+                                            hard_targets=hard_targets,
+                                            easy_targets=easy_targets)
     return dict(
         loss=validation_loss.item() / len(data_loader),
-        **evaluator.finalize(),
+        **ranking_evaluator.finalize(),
+        **precision_evaluator.finalize()
     )
-
-
-def expected_mean_rank_from_csv(
-    csv_path: Union[pathlib.Path, os.PathLike],
-    average: str = MICRO_AVERAGE,
-    num_entities: Optional[int] = None,
-) -> float:
-    """Compute expected mean rank for queries stored as CSV."""
-    # TODO: Fix the number of entities
-    num_entities = num_entities or get_entity_mapper().highest_entity_index + 1
-
-    # normalize path
-    csv_path = pathlib.Path(csv_path).expanduser().resolve()
-    df = pandas.read_csv(csv_path)
-    logger.info(f"Read {df.shape[0]} queries from {csv_path.as_uri()}")
-
-    target_columns = [c for c in df.columns if c.endswith("target")]
-    assert len(target_columns) == 1
-
-    # aggregate
-    nominator = denominator = 0
-    for nt in (df[target_columns[0]].str.count("|") + 1):
-        num_candidates = num_entities - nt + 1
-        exp = 0.5 * (num_candidates + 1)
-        if average == MICRO_AVERAGE:
-            # micro average, each true answer's rank counts
-            nominator += exp * nt
-            denominator += nt
-        elif average == MACRO_AVERAGE:
-            # macro average, all true answer's contribute together as one
-            nominator += exp
-            denominator += 1
-        else:
-            raise ValueError(average)
-
-    return nominator / denominator
 
 
 @torch.no_grad()
 def evaluate_qualifier_impact(
-    data_loader: torch.utils.data.DataLoader[QueryGraphBatch],
+    data_loader: DataLoader[QueryGraphBatch],
     model: QueryEmbeddingModel,
     similarity: Similarity,
     ks: Collection[int] = (1, 3, 5, 10),
