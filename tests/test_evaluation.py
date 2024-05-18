@@ -1,7 +1,10 @@
 """Tests for evaluation."""
 import torch
+import numpy as np
 
-from mphrqe.evaluation import MACRO_AVERAGE, MICRO_AVERAGE, RankingMetricAggregator, _Ranks, filter_ranks, score_to_rank_multi_target
+from mphrqe.evaluation import (MACRO_AVERAGE, MICRO_AVERAGE,
+                               RankingMetricAggregator, SetPrecisionAggregator,
+                               _Ranks, filter_ranks, score_to_rank_multi_target)
 
 
 def _test_score_to_rank_multi_target(average: str):
@@ -23,8 +26,10 @@ def _test_score_to_rank_multi_target(average: str):
     _verify_ranks(ranks_, average, num_entities, num_positives)
 
 
-def _verify_ranks(ranks_: _Ranks, average: str, num_entities: int, num_positives: int):
-    for ranks in (ranks_.pessimistic, ranks_.optimistic, ranks_.realistic, ranks_.expected_rank):
+def _verify_ranks(ranks_: _Ranks, average: str, num_entities: int,
+                  num_positives: int):
+    for ranks in (ranks_.pessimistic, ranks_.optimistic, ranks_.realistic,
+                  ranks_.expected_rank):
         assert ranks is not None
         assert ranks.shape == (num_positives,)
         assert (ranks >= 1).all()
@@ -48,7 +53,8 @@ def test_score_to_rank_infinity():
     batch_size = 2
     num_entities = 7
     num_positives = 5
-    scores = torch.full(size=(batch_size, num_entities), fill_value=float("inf"))
+    scores = torch.full(size=(batch_size, num_entities),
+                        fill_value=float("inf"))
     targets = torch.stack([
         torch.randint(high=batch_size, size=(num_positives * 2,)),
         torch.randint(high=num_entities, size=(num_positives * 2,)),
@@ -60,7 +66,8 @@ def test_score_to_rank_infinity():
         easy_targets=easy_targets,
         average=MACRO_AVERAGE,
     )
-    _verify_ranks(ranks_, average=MACRO_AVERAGE, num_entities=num_entities, num_positives=num_positives)
+    _verify_ranks(ranks_, average=MACRO_AVERAGE, num_entities=num_entities,
+                  num_positives=num_positives)
 
 
 def test_score_to_rank_multi_target_manual():
@@ -78,7 +85,8 @@ def test_score_to_rank_multi_target_manual():
         targets=targets,
         average=MICRO_AVERAGE,
     )
-    assert torch.allclose(micro_ranks_.expected_rank, expected_expected_rank_micro)
+    assert torch.allclose(micro_ranks_.expected_rank,
+                          expected_expected_rank_micro)
     assert micro_ranks_.weight is None
 
     # Macro
@@ -88,7 +96,8 @@ def test_score_to_rank_multi_target_manual():
         targets=targets,
         average=MACRO_AVERAGE,
     )
-    assert torch.allclose(macro_ranks_.expected_rank, expected_expected_rank_macro)
+    assert torch.allclose(macro_ranks_.expected_rank,
+                          expected_expected_rank_macro)
     expected_weight = torch.as_tensor(data=[0.5, 0.5, 1.0])
     assert torch.allclose(macro_ranks_.weight, expected_weight)
 
@@ -96,7 +105,8 @@ def test_score_to_rank_multi_target_manual():
 def _test_evaluator(average: str):
     # reproducible testing
     generator = torch.manual_seed(seed=42)
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    device = torch.device(
+        "cuda") if torch.cuda.is_available() else torch.device("cpu")
     evaluator = RankingMetricAggregator(average=average)
     batch_size = 2
     num_entities = 5
@@ -104,10 +114,13 @@ def _test_evaluator(average: str):
     nnz = 4
     num_non_empty_queries = 0
     for _ in range(num_batches):
-        scores = torch.rand(batch_size, num_entities, device=device, generator=generator)
+        scores = torch.rand(batch_size, num_entities, device=device,
+                            generator=generator)
         targets = torch.stack([
-            torch.randint(high=batch_size, size=(nnz,), device=device, generator=generator),
-            torch.randint(high=num_entities, size=(nnz,), device=device, generator=generator),
+            torch.randint(high=batch_size, size=(nnz,), device=device,
+                          generator=generator),
+            torch.randint(high=num_entities, size=(nnz,), device=device,
+                          generator=generator),
         ], dim=0)
         num_non_empty_queries += targets[0].unique().shape[0]
         evaluator.process_scores_(
@@ -159,3 +172,24 @@ def test_filter_ranks_manually():
         batch_id=batch_id,
     )
     assert (filtered_rank >= 1).all()
+
+
+def test_set_based_precision():
+    """Test set-based precision in an example where precision is known."""
+    # scores: (batch_size, num_entities)
+    scores = torch.tensor([[0.0, 0.9, 0.9, 0.9, 0.9],
+                           [0.9, 0.9, 0.9, 0.9, 0.0]])
+
+    # First row is batch ID, second row is answer entity e.
+    # 0 <= e < num_entities
+    hard_answers = torch.tensor([[0, 1],
+                                 [1, 0]])
+    easy_answers = torch.tensor([[0, 1],
+                                 [2, 1]])
+
+    agg = SetPrecisionAggregator(threshold=0.1)
+    agg.process_scores_(scores, hard_answers, easy_answers)
+
+    mean_precision = agg.finalize()['mean_precision']
+
+    assert np.allclose(mean_precision, 0.5)
