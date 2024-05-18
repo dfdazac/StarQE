@@ -50,12 +50,14 @@ def test_score_to_rank_infinity():
     num_positives = 5
     scores = torch.full(size=(batch_size, num_entities), fill_value=float("inf"))
     targets = torch.stack([
-        torch.randint(high=batch_size, size=(num_positives,)),
-        torch.randint(high=num_entities, size=(num_positives,)),
+        torch.randint(high=batch_size, size=(num_positives * 2,)),
+        torch.randint(high=num_entities, size=(num_positives * 2,)),
     ], dim=0)
+    hard_targets, easy_targets = torch.chunk(targets, chunks=2, dim=-1)
     ranks_ = score_to_rank_multi_target(
         scores=scores,
-        targets=targets,
+        hard_targets=hard_targets,
+        easy_targets=easy_targets,
         average=MACRO_AVERAGE,
     )
     _verify_ranks(ranks_, average=MACRO_AVERAGE, num_entities=num_entities, num_positives=num_positives)
