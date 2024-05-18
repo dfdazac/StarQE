@@ -41,6 +41,8 @@ class Objective:
     test_data: list[str]
 
     use_wandb: bool
+    wandb_project: str
+    wandb_entity: str
     wandb_name: Optional[str] = None
 
     # Model
@@ -165,6 +167,8 @@ class Objective:
             config=config,
             use_wandb=self.use_wandb,
             wandb_name=self.wandb_name,
+            wandb_project=self.wandb_project,
+            wandb_entity=self.wandb_entity,
             information=information.info,
             is_hpo=True,
         )
@@ -218,6 +222,8 @@ def optimize(
     validation_data: list[str],
     test_data: list[str],
     use_wandb: bool,
+    wandb_project: str,
+    wandb_entity: str,
     num_workers: int,
     num_trials: Optional[int],
     timeout: Optional[float],
@@ -282,6 +288,8 @@ def optimize(
         validation_data=validation_data,
         log_level=log_level,
         use_wandb=use_wandb,
+        wandb_project=wandb_project,
+        wandb_entity=wandb_entity,
         wandb_name=wandb_name,
         num_workers=num_workers,
         metric=metric,
