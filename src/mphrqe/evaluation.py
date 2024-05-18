@@ -367,7 +367,8 @@ class RankingMetricAggregator(ScoreAggregator):
         self._aggregators[RANK_REALISTIC].process_ranks(ranks.realistic, weight=ranks.weight)
         assert ranks.expected_rank is not None
         self._expected_ranks.append(ranks.expected_rank.detach().cpu())
-        self._expected_ranks_weights.append(ranks.weight)
+        if ranks.weight is not None:
+            self._expected_ranks_weights.append(ranks.weight.detach().cpu())
 
     def finalize(self) -> Mapping[str, float]:  # noqa: D102
         result: dict[str, float] = dict()
@@ -376,7 +377,7 @@ class RankingMetricAggregator(ScoreAggregator):
                 result[f"{rank_type}.{key}"] = value
         self._aggregators.clear()
         # adjusted mean rank (index)
-        if any(w is None for w in self._expected_ranks_weights):
+        if len(self._expected_ranks_weights) == 0 or any(w is None for w in self._expected_ranks_weights):
             weights = None
         else:
             weights = torch.cat(cast(List[torch.Tensor], self._expected_ranks_weights))
@@ -417,6 +418,7 @@ def evaluate(
     ranking_evaluator = RankingMetricAggregator()
     precision_evaluator = SetPrecisionAggregator(threshold)
     validation_loss = torch.zeros(size=tuple(), device=model.device)
+    batch: QueryGraphBatch
     for batch in tqdm(data_loader, desc="Evaluation", unit="batch", unit_scale=True):
         # embed query
         x_query = model(batch)
