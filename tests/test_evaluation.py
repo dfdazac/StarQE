@@ -181,22 +181,55 @@ def test_filter_ranks_manually():
     assert (filtered_rank >= 1).all()
 
 
-def test_set_based_precision():
-    """Test set-based precision in an example where precision is known."""
-    # scores: (batch_size, num_entities)
-    scores = torch.tensor([[0.0, 0.9, 0.9, 0.9, 0.9],
-                           [0.9, 0.9, 0.9, 0.9, 0.0]])
-
-    # First row is batch ID, second row is answer entity e.
-    # 0 <= e < num_entities
-    hard_answers = torch.tensor([[0, 1],
-                                 [1, 0]])
-    easy_answers = torch.tensor([[0, 1],
-                                 [2, 1]])
-
-    agg = SetPrecisionAggregator(threshold=0.1)
-    agg.process_scores_(scores, hard_answers, easy_answers)
+def _test_set_based_precision_value(scores: torch.FloatTensor,
+                                    hard_targets: torch.LongTensor,
+                                    easy_targets: torch.LongTensor,
+                                    threshold: float,
+                                    value: float):
+    """Test whether computed set-based precision is close to value"""
+    agg = SetPrecisionAggregator(threshold=threshold)
+    agg.process_scores_(scores, hard_targets, easy_targets)
 
     mean_precision = agg.finalize()['mean_precision']
 
-    assert np.allclose(mean_precision, 0.5)
+    assert np.allclose(mean_precision, value)
+
+
+def test_set_based_precision_half():
+    """Test set-based precision in an example where precision is known."""
+    # scores: (batch_size, num_entities)
+    scores = torch.FloatTensor([[0.0, 0.9, 0.9, 0.9, 0.9],
+                                [0.9, 0.9, 0.9, 0.9, 0.0]])
+
+    # First row is batch ID, second row is answer entity e.
+    # 0 <= e < num_entities
+    hard_answers = torch.LongTensor([[0, 1],
+                                     [1, 0]])
+    easy_answers = torch.LongTensor([[0, 1],
+                                     [2, 1]])
+
+    _test_set_based_precision_value(scores,
+                                    hard_answers,
+                                    easy_answers,
+                                    threshold=0.0,
+                                    value=0.5)
+
+
+def test_set_based_precision_zero():
+    """Test set-based precision in an example where precision is zero due to
+    not answers predicted at all."""
+    # scores: (batch_size, num_entities)
+    scores = torch.full((2, 5), fill_value=-1.0)
+
+    # First row is batch ID, second row is answer entity e.
+    # 0 <= e < num_entities
+    hard_answers = torch.LongTensor([[0, 1],
+                                     [1, 0]])
+    easy_answers = torch.LongTensor([[0, 1],
+                                     [2, 1]])
+
+    _test_set_based_precision_value(scores,
+                                    hard_answers,
+                                    easy_answers,
+                                    threshold=0.0,
+                                    value=0.0)
