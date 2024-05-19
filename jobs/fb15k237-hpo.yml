@@ -1,6 +1,6 @@
 project: mpqepp
 program: hqe
-method: random
+method: bayes
 metric:
   name: validation.realistic.hits_at_10
   goal: maximize
