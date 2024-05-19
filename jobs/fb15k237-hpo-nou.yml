@@ -1,6 +1,6 @@
 project: mpqepp
 program: hqe
-method: bayes
+method: random
 metric:
   name: validation.realistic.hits_at_10
   goal: maximize
@@ -47,8 +47,8 @@ command:
   - ${env}
   - ${program}
   - train
-  - --train-data=/*/*:*
-  - --validation-data=/*/*:*
-  - --test-data=/*/*:*
+  - --train-data=/*/0qual:*
+  - --validation-data=/*/0qual:*
+  - --test-data=/*/0qual:*
   - --use-wandb
   - ${args}

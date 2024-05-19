@@ -2,7 +2,7 @@
 #SBATCH --job-name=mpqepp
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --time=02:00:00
+#SBATCH --time=10:00:00
 #SBATCH --mem=60G
 #SBATCH --partition=gpu
 #SBATCH --gpus=1
@@ -15,4 +15,4 @@ cp -r $HOME/$PROJ_FOLDER $TMPDIR
 cd $TMPDIR/$PROJ_FOLDER
 
 source activate hqeqs
-hqe train --dataset fb15k237 -tr "/*/*:100" -va "/*/*:100" -te "/*/*:100" -e 3 -b 64 -w
+wandb agent --count 1 dfdazac/mpqepp/z875awfz
