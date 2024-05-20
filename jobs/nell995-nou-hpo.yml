@@ -1,5 +1,5 @@
 project: mpqepp
-name: fb15k
+name: nell995
 program: hqe
 method: random
 metric:
@@ -8,7 +8,7 @@ metric:
 parameters:
   dataset:
     distribution: constant
-    value: fb15k
+    value: nell995
   embedding-dim:
     values:
       - 128
