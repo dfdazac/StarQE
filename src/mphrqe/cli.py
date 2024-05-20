@@ -233,9 +233,15 @@ option_threshold = click.option(
     type=float,
     default=0.0,
 )
-option_batch_size = click.option(
-    "-b",
-    "--batch-size",
+option_train_batch_size = click.option(
+    "-tb",
+    "--train-batch-size",
+    type=int,
+    default=32,
+)
+option_eval_batch_size = click.option(
+    "-tb",
+    "--eval-batch-size",
     type=int,
     default=32,
 )
@@ -312,7 +318,8 @@ def main():
 @option_epochs
 @option_learning_rate
 @option_threshold
-@option_batch_size
+@option_train_batch_size
+@option_eval_batch_size
 @option_optimizer
 # save options
 @option_save
@@ -350,7 +357,8 @@ def train_cli(
     epochs: int,
     learning_rate: float,
     threshold: float,
-    batch_size: int,
+    train_batch_size: int,
+    eval_batch_size: int,
     optimizer: str,
     # decoder
     similarity: Hint[Similarity],
@@ -368,7 +376,8 @@ def train_cli(
         train=map(resolve_sample, train_data),
         validation=map(resolve_sample, validation_data),
         test=map(resolve_sample, test_data),
-        batch_size=batch_size,
+        train_batch_size=train_batch_size,
+        eval_batch_size=eval_batch_size,
         num_workers=num_workers,
     )
 
@@ -418,7 +427,7 @@ def train_cli(
         threshold=threshold,
         early_stopper_kwargs=dict(
             key=("validation", f"{RANK_REALISTIC}.hits_at_10"),
-            patience=10,
+            patience=5,
             relative_delta=0.02,
             larger_is_better=True,
             save_best_model=True,
@@ -524,7 +533,7 @@ def evaluate_cli(
         train=map(resolve_sample, train_data) if evaluate_faithfulness else [],
         validation=map(resolve_sample, validation_data),
         test=map(resolve_sample, test_data),
-        batch_size=batch_size,
+        eval_batch_size=batch_size,
         num_workers=num_workers,
     )
     logger.info(f"Evaluating on: \n{pprint.pformat(information.info)}\n")
