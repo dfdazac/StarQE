@@ -17,6 +17,8 @@ __all__ = [
 
 class GraphPooling(nn.Module):
     """A module for graph pooling."""
+    def __init__(self, **kwargs):
+        super().__init__()
 
     @abstractmethod
     def forward(
@@ -56,7 +58,7 @@ class SumGraphPooling(GraphPooling):
 class TargetPooling(GraphPooling):
     """Aggregation by sum."""
 
-    def __init__(self, target_index: int) -> None:
+    def __init__(self, target_index: int, **kwargs) -> None:
         """
         Do the target pooling with respect to the given query target index.
         In StarQE, this was set to `get_entity_mapper().highest_entity_index + 1`

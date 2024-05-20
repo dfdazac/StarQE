@@ -105,7 +105,7 @@ class StarEQueryEmbeddingModel(QueryEmbeddingModel):
         self.stop_at_diameter = stop_at_diameter
 
         # create graph pooling
-        self.pooling = graph_pooling_resolver.make(graph_pooling, pos_kwargs=graph_pooling_kwargs)
+        self.pooling = graph_pooling_resolver.make(graph_pooling, pos_kwargs=None, **graph_pooling_kwargs)
 
     @property
     def device(self) -> torch.device:

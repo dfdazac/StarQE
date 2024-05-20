@@ -401,6 +401,7 @@ def train_cli(
         repeat_layers_until_diameter=repeat_layers_until_diameter,
         stop_at_diameter=stop_at_diameter,
         graph_pooling=graph_pooling,
+        graph_pooling_kwargs=dict(target_index=dataset.entity_mapper.number_of_entities_and_reified_relations_without_vars_and_targets() + 1)
     )
     logger.info(f"Initialized model:\n{model}.")
 
