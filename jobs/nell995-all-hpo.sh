@@ -2,7 +2,7 @@
 #SBATCH --job-name=nell995-sweep
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --time=15:00:00
+#SBATCH --time=03:00:00
 #SBATCH --mem=60G
 #SBATCH --partition=gpu
 #SBATCH --gpus=1
