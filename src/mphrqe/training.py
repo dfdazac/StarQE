@@ -53,7 +53,7 @@ def _train_epoch(
     epoch_loss = torch.zeros(size=tuple(), device=model.device)
     train_evaluator = RankingMetricAggregator()
     batch: QueryGraphBatch
-    for batch in tqdm.tqdm(data_loader, desc="Training", unit="batch", unit_scale=True):
+    for batch in tqdm.tqdm(data_loader, mininterval=10, desc="Training", unit="batch", unit_scale=True):
         # zero grad
         optimizer.zero_grad()
         # embed query

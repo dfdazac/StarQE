@@ -419,7 +419,7 @@ def evaluate(
     precision_evaluator = SetPrecisionAggregator(threshold)
     validation_loss = torch.zeros(size=tuple(), device=model.device)
     batch: QueryGraphBatch
-    for batch in tqdm(data_loader, desc="Evaluation", unit="batch", unit_scale=True):
+    for batch in tqdm(data_loader, desc="Evaluation", unit="batch", unit_scale=True, mininterval=10):
         # embed query
         x_query = model(batch)
         # compute pairwise similarity to all entities, shape: (batch_size, num_entities)
