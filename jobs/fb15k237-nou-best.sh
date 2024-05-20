@@ -20,7 +20,7 @@ hqe train \
     --validation-data=/*/0qual:* \
     --test-data=/*/0qual:* \
     --use-wandb \
-    --num_workers=2 \
+    --num-workers=2 \
     --activation=relu \
     --batch-size=64 \
     --dataset=fb15k237 \
