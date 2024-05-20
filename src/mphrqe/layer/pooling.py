@@ -61,6 +61,7 @@ class TargetPooling(GraphPooling):
         Do the target pooling with respect to the given query target index.
         In StarQE, this was set to `get_entity_mapper().highest_entity_index + 1`
         """
+        super().__init__()
         self._target_index = target_index
 
     def forward(

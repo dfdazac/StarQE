@@ -443,107 +443,107 @@ def evaluate(
     )
 
 
-@torch.no_grad()
-def evaluate_qualifier_impact(
-    data_loader: DataLoader[QueryGraphBatch],
-    model: QueryEmbeddingModel,
-    similarity: Similarity,
-    ks: Collection[int] = (1, 3, 5, 10),
-    average: str = MICRO_AVERAGE,
-    restrict_relations: Optional[Collection[int]] = None,
-) -> pandas.DataFrame:
-    """
-    Evaluate the impact of qualifier pairs for each qualifier relation.
+# @torch.no_grad()
+# def evaluate_qualifier_impact(
+#     data_loader: DataLoader[QueryGraphBatch],
+#     model: QueryEmbeddingModel,
+#     similarity: Similarity,
+#     ks: Collection[int] = (1, 3, 5, 10),
+#     average: str = MICRO_AVERAGE,
+#     restrict_relations: Optional[Collection[int]] = None,
+# ) -> pandas.DataFrame:
+#     """
+#     Evaluate the impact of qualifier pairs for each qualifier relation.
 
-    :param data_loader:
-        The evaluation data loader. batch_size = 1 is required.
-    :param model:
-        The model to evaluate.
-    :param similarity:
-        The similarity used to compute scores between query embedding and entity embeddings.
-    :param ks:
-        The values for which to compute Hits@k.
-    :param average:
-        The average to use for the scores.
-    :param restrict_relations:
-        If given, restrict evaluation to the relations for the given IDs.
+#     :param data_loader:
+#         The evaluation data loader. batch_size = 1 is required.
+#     :param model:
+#         The model to evaluate.
+#     :param similarity:
+#         The similarity used to compute scores between query embedding and entity embeddings.
+#     :param ks:
+#         The values for which to compute Hits@k.
+#     :param average:
+#         The average to use for the scores.
+#     :param restrict_relations:
+#         If given, restrict evaluation to the relations for the given IDs.
 
-    :return: columns: metric | relation_id | type | value
-        The results as a dataframe.
+#     :return: columns: metric | relation_id | type | value
+#         The results as a dataframe.
 
-    :raise NotImplementedError:
-        For batch_size > 1.
-    """
-    # make our lives easier
-    if data_loader.batch_size is None or data_loader.batch_size > 1:
-        raise NotImplementedError("Batching is not implemented yet! Thus, pass a dataloader with batch_size=1.")
+#     :raise NotImplementedError:
+#         For batch_size > 1.
+#     """
+#     # make our lives easier
+#     if data_loader.batch_size is None or data_loader.batch_size > 1:
+#         raise NotImplementedError("Batching is not implemented yet! Thus, pass a dataloader with batch_size=1.")
 
-    # set model into evaluation mode
-    model.eval()
+#     # set model into evaluation mode
+#     model.eval()
 
-    # two evaluators for each relation: one having access to full information
-    evaluator: MutableMapping[int, Tuple[RankingMetricAggregator, RankingMetricAggregator]] = dict()
+#     # two evaluators for each relation: one having access to full information
+#     evaluator: MutableMapping[int, Tuple[RankingMetricAggregator, RankingMetricAggregator]] = dict()
 
-    # make a (hash) set for faster existence checks
-    if restrict_relations is not None:
-        restrict_relations = set(restrict_relations)
+#     # make a (hash) set for faster existence checks
+#     if restrict_relations is not None:
+#         restrict_relations = set(restrict_relations)
 
-    batch: QueryGraphBatch
-    for batch in tqdm(data_loader, desc="Qualifier Impact Evaluation", unit="batch", unit_scale=True):
-        # guaranteed to be of batch_size = 1, i.e., contain only a single query
+#     batch: QueryGraphBatch
+#     for batch in tqdm(data_loader, desc="Qualifier Impact Evaluation", unit="batch", unit_scale=True):
+#         # guaranteed to be of batch_size = 1, i.e., contain only a single query
 
-        #: The targets, in format of pairs (graph_id, entity_id)
-        #: shape: (2, num_targets)
-        targets = batch.targets.to(model.device)
+#         #: The targets, in format of pairs (graph_id, entity_id)
+#         #: shape: (2, num_targets)
+#         targets = batch.targets.to(model.device)
 
-        # note: since we require batch_size = 1, graph_id will always be zero
-        assert (targets[0] == 0).all()
+#         # note: since we require batch_size = 1, graph_id will always be zero
+#         assert (targets[0] == 0).all()
 
-        # compute scores with full qualifier access
-        full_scores = similarity(x=model(batch), y=model.x_e)
+#         # compute scores with full qualifier access
+#         full_scores = similarity(x=model(batch), y=model.x_e)
 
-        # determine occurring qualifier relations
-        # note: these are the batch-local IDs!
-        local_qualifier_relations_in_batch = batch.qualifier_index[0].unique()
+#         # determine occurring qualifier relations
+#         # note: these are the batch-local IDs!
+#         local_qualifier_relations_in_batch = batch.qualifier_index[0].unique()
 
-        # store full qualifier index
-        full_qualifier_index = batch.qualifier_index
+#         # store full qualifier index
+#         full_qualifier_index = batch.qualifier_index
 
-        # restricted evaluation for each occurring relation
-        global_relation_ids = batch.relation_ids[local_qualifier_relations_in_batch].tolist()
-        for local_relation_id, relation_id in zip(
-            local_qualifier_relations_in_batch,
-            global_relation_ids,
-        ):
-            # If evaluation should be restricted to certain relations, skip relations if necessary
-            if restrict_relations is not None and relation_id not in restrict_relations:
-                continue
+#         # restricted evaluation for each occurring relation
+#         global_relation_ids = batch.relation_ids[local_qualifier_relations_in_batch].tolist()
+#         for local_relation_id, relation_id in zip(
+#             local_qualifier_relations_in_batch,
+#             global_relation_ids,
+#         ):
+#             # If evaluation should be restricted to certain relations, skip relations if necessary
+#             if restrict_relations is not None and relation_id not in restrict_relations:
+#                 continue
 
-            # make sure that we have ranking aggregators
-            # note: we could initialize them beforehand, but then we would need to know the number of relations
-            evaluator.setdefault(
-                relation_id, (
-                    RankingMetricAggregator(ks=ks, average=average),  # full
-                    RankingMetricAggregator(ks=ks, average=average),  # restricted
-                ),
-            )
-            full_evaluator, restricted_evaluator = evaluator[relation_id]
+#             # make sure that we have ranking aggregators
+#             # note: we could initialize them beforehand, but then we would need to know the number of relations
+#             evaluator.setdefault(
+#                 relation_id, (
+#                     RankingMetricAggregator(ks=ks, average=average),  # full
+#                     RankingMetricAggregator(ks=ks, average=average),  # restricted
+#                 ),
+#             )
+#             full_evaluator, restricted_evaluator = evaluator[relation_id]
 
-            # process full scores
-            full_evaluator.process_scores_(scores=full_scores, targets=targets)
+#             # process full scores
+#             full_evaluator.process_scores_(scores=full_scores, targets=targets)
 
-            # remove qualifier pairs for the currently considered relation
-            batch.qualifier_index = full_qualifier_index[:, full_qualifier_index[0] != local_relation_id]
+#             # remove qualifier pairs for the currently considered relation
+#             batch.qualifier_index = full_qualifier_index[:, full_qualifier_index[0] != local_relation_id]
 
-            # compute scores on restricted batch
-            restricted_scores = similarity(x=model(batch), y=model.x_e)
+#             # compute scores on restricted batch
+#             restricted_scores = similarity(x=model(batch), y=model.x_e)
 
-            # process restricted scores
-            restricted_evaluator.process_scores_(scores=restricted_scores, targets=targets)
+#             # process restricted scores
+#             restricted_evaluator.process_scores_(scores=restricted_scores, targets=targets)
 
-    return pandas.DataFrame(data=[
-        (metric, relation_id, label, value)
-        for relation_id, evaluator_pair in evaluator.items()
-        for label, evaluator_ in zip(["full", "restricted"], evaluator_pair)
-        for metric, value in evaluator_.finalize().items()
-    ], columns=["metric", "relation_id", "type", "value"])
+#     return pandas.DataFrame(data=[
+#         (metric, relation_id, label, value)
+#         for relation_id, evaluator_pair in evaluator.items()
+#         for label, evaluator_ in zip(["full", "restricted"], evaluator_pair)
+#         for metric, value in evaluator_.finalize().items()
+#     ], columns=["metric", "relation_id", "type", "value"])

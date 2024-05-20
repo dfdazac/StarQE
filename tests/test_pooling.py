@@ -5,7 +5,6 @@ import pytest
 import torch
 import unittest_templates
 
-from gqs.mapping import get_entity_mapper
 from mphrqe.layer.pooling import GraphPooling, SumGraphPooling, TargetPooling
 
 
@@ -58,11 +57,7 @@ class TargetPoolingTests(GraphPoolingTests):
     """Tests for target only aggregation."""
 
     cls = TargetPooling
-
-    @property
-    def target_index(self) -> int:
-        # TODO: can we mock get_entity_mapper?
-        return get_entity_mapper().highest_entity_index + 1
+    kwargs = {"target_index": -1}
 
 
 class GraphPoolingMetaTest(unittest_templates.MetaTestCase[GraphPooling]):

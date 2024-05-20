@@ -67,6 +67,7 @@ class StarEQueryEmbeddingModel(QueryEmbeddingModel):
         message_weighting_kwargs: Optional[Mapping[str, Any]] = None,
         edge_dropout: float = 0.0,
         graph_pooling: HintOrType[GraphPooling] = None,
+        graph_pooling_kwargs: Optional[Mapping[str, Any]] = None,
         repeat_layers_until_diameter: bool = False,
         stop_at_diameter: bool = False,
     ):
@@ -104,7 +105,7 @@ class StarEQueryEmbeddingModel(QueryEmbeddingModel):
         self.stop_at_diameter = stop_at_diameter
 
         # create graph pooling
-        self.pooling = graph_pooling_resolver.make(graph_pooling)
+        self.pooling = graph_pooling_resolver.make(graph_pooling, pos_kwargs=graph_pooling_kwargs)
 
     @property
     def device(self) -> torch.device:
