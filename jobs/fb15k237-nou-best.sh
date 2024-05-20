@@ -2,7 +2,7 @@
 #SBATCH --job-name=mpqepp
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --time=10:00:00
+#SBATCH --time=15:00:00
 #SBATCH --mem=60G
 #SBATCH --partition=gpu
 #SBATCH --gpus=1
@@ -20,6 +20,7 @@ hqe train \
     --validation-data=/*/0qual:* \
     --test-data=/*/0qual:* \
     --use-wandb \
+    --num_workers=2 \
     --activation=relu \
     --batch-size=64 \
     --dataset=fb15k237 \
@@ -29,4 +30,5 @@ hqe train \
     --learning-rate=0.0004269404596549132 \
     --message-weighting=attention \
     --num-layers=3 \
-    --use-bias=True
+    --use-bias=True \
+    --save
