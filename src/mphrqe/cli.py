@@ -417,7 +417,7 @@ def train_cli(
         threshold=threshold,
         early_stopper_kwargs=dict(
             key=("validation", f"{RANK_REALISTIC}.hits_at_10"),
-            patience=5,
+            patience=10,
             relative_delta=0.02,
             larger_is_better=True,
             save_best_model=True,
