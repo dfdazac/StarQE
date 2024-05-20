@@ -51,4 +51,6 @@ command:
   - --train-data=/*/0qual:*
   - --validation-data=/*/0qual:*
   - --use-wandb
+  - --num-workers=2
+  - --save
   - ${args}

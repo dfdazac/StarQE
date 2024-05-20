@@ -1,4 +1,5 @@
 project: mpqepp
+name: fb15k237
 program: hqe
 method: random
 metric:
@@ -49,6 +50,7 @@ command:
   - train
   - --train-data=/*/0qual:*
   - --validation-data=/*/0qual:*
-  - --test-data=/*/0qual:*
   - --use-wandb
+  - --num-workers=2
+  - --save
   - ${args}

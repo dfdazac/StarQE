@@ -2,7 +2,7 @@
 #SBATCH --job-name=nell995-sweep
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --time=10:00:00
+#SBATCH --time=15:00:00
 #SBATCH --mem=60G
 #SBATCH --partition=gpu
 #SBATCH --gpus=1
@@ -15,4 +15,4 @@ cp -r $HOME/$PROJ_FOLDER $TMPDIR
 cd $TMPDIR/$PROJ_FOLDER
 
 source activate hqeqs
-wandb agent --count 1 dfdazac/mpqepp/nt8n6qub
+wandb agent --count 1 dfdazac/mpqepp/9v7taup3

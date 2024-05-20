@@ -15,4 +15,4 @@ cp -r $HOME/$PROJ_FOLDER $TMPDIR
 cd $TMPDIR/$PROJ_FOLDER
 
 source activate hqeqs
-wandb agent --count 1 ddfdazac/mpqepp/r325kag8
+wandb agent --count 1 dfdazac/mpqepp/db20zkda
