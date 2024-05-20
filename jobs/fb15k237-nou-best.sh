@@ -22,7 +22,7 @@ hqe train \
     --use-wandb \
     --num-workers=2 \
     --activation=relu \
-    --batch-size=64 \
+    --train-batch-size=64 \
     --dataset=fb15k237 \
     --dropout=0.1 \
     --embedding-dim=512 \
