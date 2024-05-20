@@ -519,7 +519,7 @@ def evaluate_cli(
         f"Loaded model, trained on \n{pprint.pformat(train_information)}\n"
         f"using configuration \n{pprint.pformat(config)}\n.",
     )
-    train_batch_size = int(config["batch_size"])
+    train_batch_size = int(config["train_batch_size"])
     if batch_size is None:
         logger.info(f"No batch size provided. Using the training batch size: {train_batch_size}")
         batch_size = train_batch_size
