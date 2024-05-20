@@ -506,7 +506,7 @@ def evaluate_cli(
     data = torch.load(model_path, map_location=device)
     model, config, train_information = [data[k] for k in ("model", "config", "data")]
     logger.info(
-        f"Loaded model, trained on \n{pprint.pformat(dict(train_information))}\n"
+        f"Loaded model, trained on \n{pprint.pformat(train_information)}\n"
         f"using configuration \n{pprint.pformat(config)}\n.",
     )
     train_batch_size = int(config["batch_size"])
@@ -526,7 +526,7 @@ def evaluate_cli(
         batch_size=batch_size,
         num_workers=num_workers,
     )
-    logger.info(f"Evaluating on: \n{pprint.pformat(dict(information.info))}\n")
+    logger.info(f"Evaluating on: \n{pprint.pformat(information.info)}\n")
 
     # instantiate decoder
     similarity = similarity_resolver.make(query=data["similarity"])
