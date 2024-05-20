@@ -240,7 +240,7 @@ option_train_batch_size = click.option(
     default=32,
 )
 option_eval_batch_size = click.option(
-    "-tb",
+    "-eb",
     "--eval-batch-size",
     type=int,
     default=32,
