@@ -1,0 +1,59 @@
+project: mpqepp
+name: fb15k-all-target
+program: hqe
+method: random
+metric:
+  name: validation.realistic.hits_at_10
+  goal: maximize
+parameters:
+  dataset:
+    distribution: constant
+    value: fb15k
+  embedding-dim:
+    values:
+      - 128
+      - 256
+      - 512
+  num-layers:
+    values:
+      - 2
+      - 3
+  dropout:
+    values:
+      - 0.1
+      - 0.2
+      - 0.3
+      - 0.5
+  activation:
+    values:
+      - "relu"
+      - "leakyrelu"
+  use-bias:
+    distribution: constant
+    value: True
+  message-weighting:
+    distribution: constant
+    value: "attention"
+  graph-pooling:
+    distribution: constant
+    value: "targetpooling"
+  epochs:
+    distribution: constant
+    value: 30
+  learning-rate:
+    distribution: log_uniform_values
+    min: 1e-4
+    max: 1e-2
+  train-batch-size:
+    distribution: constant
+    value: 64
+command:
+  - ${env}
+  - ${program}
+  - train
+  - --train-data=/*/*:*
+  - --validation-data=/*/*:*
+  - --use-wandb
+  - --num-workers=2
+  - --save
+  - ${args}
